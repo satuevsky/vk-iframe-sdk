@@ -1,5 +1,42 @@
+// @flow
+
 import './xd_connection';
 import Events from 'events';
+import type {PhotoUploader} from "./photo-uploader";
+
+interface VkInterface {
+    api(method: string, params?: Object, callback: (res: VkApiResult) => void): void;
+    callMethod(method: string, ...params: any): void;
+    addCallback(event: string, callback: ()=>*): void;
+    init(onSuccess: ()=>*, onFail: ()=>*, version: string): void;
+}
+type VkApiResult = {
+    error?: {error_code: number, error_msg: string},
+    response?: any
+}
+
+type SharePhotoParams = {
+    uid: number,
+    photo_base64: string,
+    message?: string,
+    link?: string
+};
+type SavePhotoParams = {
+    photo_base64: string,
+    caption?: string,
+    album_name: string,
+    album_description?: string
+};
+interface SharePhotoError {
+    is_cancel?: boolean
+}
+
+type OrderResult = {
+    status: string,
+    orderId?: number,
+};
+type OnScrollCallback = (number, number) => void;
+
 
 let iFrameTop = 112;
 
@@ -10,6 +47,14 @@ class VkIframeSdk extends Events{
         scroll:         "scroll",
     };
 
+    VK: VkInterface;
+    v: string;
+    lastRequestTime: number;
+    photoUploader: PhotoUploader;
+    scrollTop: number;
+    _disableScroll: boolean;
+    orderCallback: ?(error: ?any, result: ?OrderResult)=>void;
+
     /**
      * VkIframeSdk constructor.
      * @param {object} photoUploader
@@ -17,7 +62,7 @@ class VkIframeSdk extends Events{
      * @param {uploadFunction} photoUploader.upload
      * @constructor
      */
-    constructor({photoUploader, v}){
+    constructor({photoUploader, v}: {photoUploader: PhotoUploader, v?: string}){
         super();
 
         this.VK = window.VK;
@@ -27,6 +72,8 @@ class VkIframeSdk extends Events{
         this._disableScroll = false;        //if true onScroll would not be emitted
         this.scrollTop = 0;                 //current scroll position
         this.orderCallback = null;          //callback for onOrder events
+
+
 
         //subscribe to to onScroll events
         this.VK.addCallback('onScroll', (scroll, windowHeight) => {
@@ -61,7 +108,7 @@ class VkIframeSdk extends Events{
      * @param {object} params - Request params.
      * @return {Promise<*>}
      */
-    api(method, params={}){
+    api(method: string, params: Object = {}): Promise<*>{
         return new Promise((resolve, reject) => {
             params.v = params.v || this.v;  //api version
             if(window.location.protocol === 'https:')
@@ -98,7 +145,7 @@ class VkIframeSdk extends Events{
      * @param {string} [link] - Add link to attachments.
      * @return {Promise<number>}
      */
-    async sharePhoto({uid, message, photo_base64, link}){
+    async sharePhoto({uid, message, photo_base64, link}: SharePhotoParams): Promise<number>{
         let self = this,
             //getting upload url
             uploadServer = await this.api('photos.getWallUploadServer'),
@@ -132,7 +179,7 @@ class VkIframeSdk extends Events{
         }catch(e){
             restoreScroll();
             if(e.error_code === 10007){
-                let error = new Error("Canceled by user");
+                let error: SharePhotoError = new Error("Canceled by user");
                 error.is_cancel = true;
                 throw error;
             }
@@ -158,7 +205,7 @@ class VkIframeSdk extends Events{
      * @param {string} [album_description] - Description of the album. Will be specified when creating the album.
      * @return {Promise<number>}
      */
-    async savePhoto({photo_base64, caption, album_name, album_description}){
+    async savePhoto({photo_base64, caption, album_name, album_description}: SavePhotoParams): Promise<number>{
         if(!album_name){
             throw new Error("album_name is not defined");
         }
@@ -188,11 +235,11 @@ class VkIframeSdk extends Events{
      * @param {string} item - Item name
      * @return {Promise<{status: string, orderId: number}>}
      */
-    showOrderBox({item}){
+    showOrderBox({item}: {item: string}): Promise<OrderResult>{
         return new Promise((resolve, reject) => {
-            this.orderCallback = (err, res) => {
+            this.orderCallback = (err: ?any, res: ?OrderResult) => {
                 this.orderCallback = null;
-                if(err){
+                if(err || !res){
                     reject(err);
                 }else{
                     resolve(res);
@@ -208,7 +255,7 @@ class VkIframeSdk extends Events{
      * @param {number} height
      * @return {{width: number, height: number}}
      */
-    resizeWindow(width, height){
+    resizeWindow(width: number, height: number): {width: number, height: number}{
         this.VK.callMethod("resizeWindow", width, height);
         return {width: width, height: height};
     }
@@ -218,7 +265,7 @@ class VkIframeSdk extends Events{
      * @param {function} listener
      * @return {function(): (*|void)}
      */
-    onWindowScroll(listener){
+    onWindowScroll(listener: OnScrollCallback): ()=>any{
         this.on(VkIframeSdk.Events.scroll, listener);
         this.VK.callMethod("scrollSubscribe", true);
         return () => this.removeListener("onScroll", listener);
@@ -229,7 +276,7 @@ class VkIframeSdk extends Events{
      * @param {number} top
      * @param {number} speed
      */
-    scrollWindow(top, speed){
+    scrollWindow(top: number, speed?: number){
         this.VK.callMethod('scrollWindow', top + iFrameTop, speed);
     }
 }

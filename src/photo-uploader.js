@@ -1,32 +1,40 @@
+// @flow
 /**
  * Created by Islam on 19.12.2016.
  */
 
 let fsupport = window.fetch && !window.fetch.polyfill && !!window.Blob && !!window.FormData;
 
-class PhotoUploader {
+export interface PhotoUploader {
+    upload(url: string, photo_base64: string, photo_name?: string): any;
+}
+
+class VkPhotoUploader implements PhotoUploader{
+    proxyUrl: string;
+    base64ProxyUrl: string;
+
     /**
      * Constructor for PhotoUploader.
      * @param {string} proxyUrl - URL for upload photo as binary data.
      * @param {string} base64ProxyUrl - URL for upload photo as base64.
      */
-	constructor({proxyUrl, base64ProxyUrl}){
+    constructor({proxyUrl, base64ProxyUrl}: {proxyUrl: string, base64ProxyUrl: string}){
         this.proxyUrl = proxyUrl;
         this.base64ProxyUrl = base64ProxyUrl;
-
-        if(!fsupport){
-            this.upload = this.uploadAsBase64;
-        }
-	}
+    }
 
     /**
-	 * Upload photo as binary data via proxy.
+     * Upload photo as binary data via proxy.
      * @param {string} url - Upload URL.
      * @param {string} photo_base64 - Photo as base64 string.
      * @param {string} [photo_name] - Optional. File name to upload.
      * @return {Promise<*>}
      */
-	async upload(url, photo_base64, photo_name="photo"){
+    async upload(url: string, photo_base64: string, photo_name?: string = "photo"): any {
+        if(!fsupport){
+            return await this.uploadAsBase64(url, photo_base64, photo_name);
+        }
+
         let img = b64toBlob(photo_base64.split(',')[1], 'image/jpeg'),	//convert base64 to blob
             data = new FormData();
 
@@ -41,7 +49,7 @@ class PhotoUploader {
             return await this.uploadAsBase64(url, photo_base64, photo_name);
         }
 
-	}
+    }
 
     /**
      * Upload photo as base64 via proxy.
@@ -50,7 +58,7 @@ class PhotoUploader {
      * @param {string} [photo_name]
      * @return {Promise<Response>}
      */
-    async uploadAsBase64(url, photo_base64, photo_name="photo"){
+    async uploadAsBase64(url: string, photo_base64: string, photo_name?: string = "photo"): any {
         let data = "upload_url=" + encodeURIComponent(url);
         data += "&file=" + encodeURIComponent(photo_base64);
 
@@ -64,7 +72,6 @@ class PhotoUploader {
         }).then(r => r.json());
     }
 }
-
 
 function b64toBlob(b64Data, contentType, sliceSize) {
 	contentType = contentType || '';
@@ -90,4 +97,4 @@ function b64toBlob(b64Data, contentType, sliceSize) {
 	return new Blob(byteArrays, {type: contentType});
 }
 
-export default PhotoUploader;
+export default VkPhotoUploader;
